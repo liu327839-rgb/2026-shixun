@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
-def process(img_path):
-    img=cv2.imread(img_path)
+def process(image_path):
+    img=cv2.imread(image_path)
     img=cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
     img=cv2.resive(img,(224,224))
     img=img.astype(np.float32)/255.0
