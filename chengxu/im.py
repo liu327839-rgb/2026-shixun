@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 def bilinear_resize(img,src_h,src_w,dst_h=224,dst_w=224):#scr:原图,dst:目标图
-   channels = img.shape
+   channels = img.shape[2] if len(img.shape) == 3 else 1 #判断是否为彩色图
    dst=np.zeros((dst_h,dst_w,channels),dtype=np.float32)
    scale_x = src_w/dst_w
    scale_y = src_h/dst_h
@@ -29,7 +29,7 @@ def bgr_to_rgb(img):
          dst(i,j,1) = img(i,j,1)
          dst(i,j,0) = img(i,j,2)
     return dst
-def manual_normalize(img):
+def manual_normalize(img):#0~225转为0~1
    h,w,c = img.shape
    dst = np.zeros_like(img,dtype=np.float32)
    for i in range (h):
@@ -37,7 +37,7 @@ def manual_normalize(img):
          for ch in range (c):
             dst[i,j,ch] = img[i,j,ch]/255.0
    return dst
-def manual_standardize(img):
+def manual_standardize(img):#标准化
    mean = np.array([0.485,0.456,0.406],dtype=np.float32)
    std = np.array([0.229,0.224,0.225],dtype=np.float32)
    h,w,c = img.shape
@@ -47,7 +47,7 @@ def manual_standardize(img):
          for ch in range (c):
             dst[i,j,ch]=(img[i,j,ch]-mean[ch])/std[ch]
    return dst
-def hwc_to_chw(img):
+def hwc_to_chw(img):#重排
    h,w,c = img.shape
    dst = np.zeros_like(img,dtype=np.float32)
    for i in range (h):
