@@ -9,4 +9,6 @@ class ImageQueue:
         return self.items.pop(0)
     def is_empty(self):
         return len(self.items) == 0
+    def clear(self):
+        self.items = []
     
