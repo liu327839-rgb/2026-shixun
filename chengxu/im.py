@@ -25,9 +25,9 @@ def bgr_to_rgb(img):
     h,w,c=img.shape
     for i in range(h):
       for j in range(w):
-         dst(i,j,2) = img(i,j,0)
-         dst(i,j,1) = img(i,j,1)
-         dst(i,j,0) = img(i,j,2)
+         dst[i,j,2] = img[i,j,0]
+         dst[i,j,1] = img[i,j,1]
+         dst[i,j,0] = img[i,j,2]
     return dst
 def manual_normalize(img):#0~225转为0~1
    h,w,c = img.shape
@@ -82,6 +82,7 @@ def image_preprocess_batch(image_path):
       img =  image_process(path)
       batch.append(img)
       return np.concatenate(batch,axis=0)
+
 
 
     
