@@ -6,6 +6,7 @@ from PIL import ImageTk, Image as pillow
 from queue_image import ImageQueue
 current_image_path = None
 image_queue = ImageQueue()
+
 def  select_batch_files():
     file_paths = filedialog.askopenfilenames(filetypes=[("Image files", "*.jpg;*.jpeg;*.png;*.bmp")])
     if not file_paths:
@@ -16,6 +17,7 @@ def  select_batch_files():
     status_label.config(text="状态：批量图片导入成功")
     current_task_label.config(text=f"当前任务:{current_image_path if current_image_path else '无'}")
     remaining_label.config(text=f"剩余图片数量：{len(image_queue.items)}")
+
 def process_next_image():
     if image_queue.is_empty():
         status_label.config(text="状态：没有更多图片需要识别")
@@ -32,13 +34,15 @@ def process_next_image():
     label, confidence = recognize_image(image_path)
     result_label.config(text="识别结果：" + label)
     confidence_label.config(text=f"置信度：{confidence * 100:.2f}%")
-    root.after(500, process_next_image)
+    root.after(2000, process_next_image)
+
 def show_image_preview(image_path):
     img = pillow.open(image_path)
     img.thumbnail((400, 400))
     img_tk = ImageTk.PhotoImage(img)
     image_preview.image = img_tk
     image_preview.config(image=img_tk)
+
 def select_file():
     global current_image_path
     file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg;*.jpeg;*.png;*.bmp")])
@@ -49,10 +53,12 @@ def select_file():
         img_tk = ImageTk.PhotoImage(img)
         image_preview.image = img_tk
         image_preview.config(image=img_tk)
+
 def recognize_image(image_path):
     label = "假的例子：猫"
     confidence = 0.95
     return label, confidence
+
 def start_recognize():
     if current_image_path is None:
         result_label.config(text="请先选择图片")
