@@ -17,7 +17,7 @@ def bilinear_resize(img,src_h,src_w,dst_h=224,dst_w=224):#scr:原图,dst:目标�
          src_y1 = min(src_y0 + 1,src_h - 1)
          top = (src_x1 - src_x) * img[src_y0,src_x0,c] + (src_x - src_x0) * img[src_y0,src_x1,c]
          bottom = (src_x1 - src_x) * img[src_y1,src_x0,c] + (src_x - src_x0) * img[src_y1,src_x1,c]
-         dst[dst_y,dst_x,c] = int((src_y1-src_y)*top+(src_y-src_y0)*bottom)
+         dst[dst_y,dst_x,c] = ((src_y1-src_y)*top+(src_y-src_y0)*bottom)
    return dst
                                 
 def bgr_to_rgb(img):
@@ -32,23 +32,34 @@ def bgr_to_rgb(img):
 def manual_normalize(img):
    h,w,c = img.shape
    dst = np.zeros_like(img,dtype=np.float32)
-   for dst_h in range (h):
-      for dst_w in range (w):
-         for dst_c in range (c):
-            dst[dst_h,dst_w,dst_c]=img[dst_h,dst_w,dst_c]/255.0
+   for i in range (h):
+      for j in range (w):
+         for ch in range (c):
+            dst[i,j,ch]=img[i,j,ch]/255.0
    return dst
-def manual_normalize(img):
+def manual_standardize(img):
    mean = np.array([0.485,0.456,0.406],dtype=np.float32)
    std = np.array([0.229,0.224,0.225],dtype=np.float32)
+   h,w,c = img.shape
+   dst = np.zeros_like(img,dtype=np.float32)
+   for i in range (h):
+      for j in range (w):
+         for ch in range (c):
+            dst[i,j,ch]=(img[i,j,ch]-mean[ch])/std[ch]
+   return dst
+def hwc_to_chw(img):
+   h,w,c = img.shape
+   dst = np.zeros_like(img,dtype=np.float32)
+   for i in range (h):
+      for j in range (w):
+         for ch in range (c):
+            dst[i,j,ch]=img[ch,i,j]
+   return dst
 
    
-   
-   
 
 
-
-
-def imageprocess(image_path):
+def image_process(image_path):
     img=cv2.imread(image_path)
     #img=cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
 
@@ -56,7 +67,21 @@ def imageprocess(image_path):
 
     #img=img.astype(np.float32)/255.0
     #img=(img-[0.485,0.456,0.406])/[0.229,0.224,0.225]
+    img = bilinear_resize(img)
+    img = bgr_to_rgb(img)
+    img = manual_normalize(img)
+    img = manual_standardize(img)
+    img = hwc_to_chw(img)
+
     return img.transpose(2,0,1)[np.newaxis,...]
+
+
+def image_preprocess_batch(image_path):
+   batch = []
+   for path in image_path:
+      img =  image_process(path)
+      batch.append(img)
+      return np.concatenate(batch,axis=0)
 
 
     
