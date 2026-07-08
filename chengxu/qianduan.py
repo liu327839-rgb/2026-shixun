@@ -48,12 +48,7 @@ def select_file():
     global current_image_path
     file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg;*.jpeg;*.png;*.bmp")])
     if file_path:
-        current_image_path = file_path
-        img = pillow.open(file_path)
-        img.thumbnail((400, 400))
-        img_tk = ImageTk.PhotoImage(img)
-        image_preview.image = img_tk
-        image_preview.config(image=img_tk)
+        show_image_preview(file_path)
 
 def recognize_image(image_path):
     label = "假的例子：猫"
