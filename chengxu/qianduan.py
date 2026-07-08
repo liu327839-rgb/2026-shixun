@@ -8,6 +8,64 @@ from PIL import ImageTk, Image as pillow
 from queue_image import ImageQueue
 current_image_path = None
 image_queue = ImageQueue()
+DB_path = "recognition_history.db"
+
+def init_db():
+    conn =sqlite3.connect(DB_path)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS recognition_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        image_path TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        class_name TEXT NOT NULL,
+        confidence REAL NOT NULL,
+        created_at TEXT NOT NULL
+    )
+""")
+    conn.commit()
+    conn.close()
+
+def save_result(image_path, class_name, confidence):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    file_name = os.path.basename(image_path)
+    created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    cursor.execute("""
+        INSERT INTO recognition_history 
+        (image_path, file_name, class_name, confidence, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (image_path, file_name, class_name, confidence, created_at))
+
+    conn.commit()
+    conn.close()
+
+def search_history(keyword=""):
+    conn = sqlite3.connect(DB_path)
+    cursor = conn.cursor()
+
+    keyword = keyword.strip()
+    if keyword:
+        like_keyword = f"%{keyword}%"
+        cursor.execute("""
+            SELECT id, created_at, file_name, class_name, confidence, image_path
+            FROM recognition_history
+            WHERE file_name LIKE ? OR class_name LIKE ?
+            ORDER BY id DESC
+        """, (like_keyword, like_keyword))
+    else:
+        cursor.execute("""
+            SELECT id, created_at, file_name, class_name, confidence, image_path
+            FROM recognition_history
+            ORDER BY id DESC
+        """)
+
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
 
 def  select_batch_files():
     file_paths = filedialog.askopenfilenames(filetypes=[("Image files", "*.jpg;*.jpeg;*.png;*.bmp")])
@@ -65,8 +123,12 @@ def start_recognize():
         return
     
     label, confidence = recognize_image(current_image_path)
-    result_label.config(text="识别结果：" + label)
-    confidence_label.config(text=f"置信度：{confidence * 100:.2f}%")
+
+result_label.config(text="识别结果：" + label)
+confidence_label.config(text=f"置信度：{confidence * 100:.2f}%")
+
+save_result(current_image_path, label, confidence)
+refresh_history_table()
         
 root = Tk()
 root.title("ai图片识别工具")
