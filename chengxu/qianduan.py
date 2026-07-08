@@ -44,5 +44,6 @@ result_label = Label(root, text="识别结果：等待中", font=("微软雅黑"
 result_label.pack()
 confidence_label = Label(root, text="置信度：--", font=("微软雅黑", 15), fg="black")
 confidence_label.pack()
+
 root.mainloop()
 
