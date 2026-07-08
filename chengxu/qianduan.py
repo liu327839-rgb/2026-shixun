@@ -1,8 +1,11 @@
 import os
+import queue
 from tkinter import *
 from tkinter import filedialog, ttk
 from PIL import ImageTk, Image as pillow
+from queue_image import ImageQueue
 current_image_path = None
+current_image_path = ImageQueue()
 def select_file():
     global current_image_path
     file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg;*.jpeg;*.png;*.bmp")])
