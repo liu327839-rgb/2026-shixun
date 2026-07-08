@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 def bilinear_resize(img,src_h,src_w,dst_h=224,dst_w=224):#scr:原图,dst:目标图
-   channels=img.shape
+   channels = img.shape
    dst=np.zeros((dst_h,dst_w,channels),dtype=np.float32)
    scale_x = src_w/dst_w
    scale_y = src_h/dst_h
@@ -25,9 +25,9 @@ def bgr_to_rgb(img):
     h,w,c=img.shape
     for i in range(h):
       for j in range(w):
-         dst(i,j,2)=img(i,j,0)
-         dst(i,j,1)=img(i,j,1)
-         dst(i,j,0)=img(i,j,2)
+         dst(i,j,2) = img(i,j,0)
+         dst(i,j,1) = img(i,j,1)
+         dst(i,j,0) = img(i,j,2)
     return dst
 def manual_normalize(img):
    h,w,c = img.shape
@@ -35,7 +35,7 @@ def manual_normalize(img):
    for i in range (h):
       for j in range (w):
          for ch in range (c):
-            dst[i,j,ch]=img[i,j,ch]/255.0
+            dst[i,j,ch] = img[i,j,ch]/255.0
    return dst
 def manual_standardize(img):
    mean = np.array([0.485,0.456,0.406],dtype=np.float32)
@@ -53,7 +53,7 @@ def hwc_to_chw(img):
    for i in range (h):
       for j in range (w):
          for ch in range (c):
-            dst[i,j,ch]=img[ch,i,j]
+            dst[i,j,ch] = img[ch,i,j]
    return dst
 
    
