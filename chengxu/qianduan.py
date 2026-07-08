@@ -1,5 +1,7 @@
 import os
 import queue
+import sqlite3
+from datetime import datetime
 from tkinter import *
 from tkinter import filedialog, ttk
 from PIL import ImageTk, Image as pillow
@@ -46,6 +48,7 @@ def show_image_preview(image_path):
 
 def select_file():
     global current_image_path
+    current_image_path = file_path
     file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg;*.jpeg;*.png;*.bmp")])
     if file_path:
         show_image_preview(file_path)
