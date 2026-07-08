@@ -17,6 +17,7 @@ def  select_batch_files():
     status_label.config(text="状态：批量图片导入成功")
     current_task_label.config(text=f"当前任务:{current_image_path if current_image_path else '无'}")
     remaining_label.config(text=f"剩余图片数量：{len(image_queue.items)}")
+    show_image_preview(file_paths[0])
 
 def process_next_image():
     if image_queue.is_empty():
