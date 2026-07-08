@@ -32,20 +32,29 @@ def bgr_to_rgb(img):
 def manual_normalize(img):
    h,w,c = img.shape
    dst = np.zeros_like(img,dtype=np.float32)
-   for dst_h in range (h):
-      for dst_w in range (w):
-         for dst_c in range (c):
-            dst[dst_h,dst_w,dst_c]=img[dst_h,dst_w,dst_c]/255.0
+   for i in range (h):
+      for j in range (w):
+         for ch in range (c):
+            dst[i,j,ch]=img[i,j,ch]/255.0
    return dst
-def manual_normalize(img):
+def manual_standardize(img):
    mean = np.array([0.485,0.456,0.406],dtype=np.float32)
    std = np.array([0.229,0.224,0.225],dtype=np.float32)
-
-   
-   
-   
-
-
+   h,w,c = img.shape
+   dst = np.zeros_like(img,dtype=np.float32)
+   for i in range (h):
+      for j in range (w):
+         for ch in range (c):
+            dst[i,j,ch]=(img[i,j,ch]-mean[ch])/std[ch]
+   return dst
+def hwc_to_chw(img):
+   h,w,c = img.shape
+   dst = np.zeros_like(img,dtype=np.float32)
+   for i in range (h):
+      for j in range (w):
+         for ch in range (c):
+            dst[i,j,ch]=img[ch,i,j]
+   return dst
 
 
 def imageprocess(image_path):
@@ -56,6 +65,12 @@ def imageprocess(image_path):
 
     #img=img.astype(np.float32)/255.0
     #img=(img-[0.485,0.456,0.406])/[0.229,0.224,0.225]
+    img = bilinear_resize(img)
+    img = bgr_to_rgb(img)
+    img = manual_normalize(img)
+    img = manual_standardize(img)
+    img = hwc_to_chw(img)
+
     return img.transpose(2,0,1)[np.newaxis,...]
 
 
