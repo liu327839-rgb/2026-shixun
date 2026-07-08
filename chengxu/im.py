@@ -17,7 +17,7 @@ def bilinear_resize(img,src_h,src_w,dst_h=224,dst_w=224):#scr:原图,dst:目标�
          src_y1 = min(src_y0 + 1,src_h - 1)
          top = (src_x1 - src_x) * img[src_y0,src_x0,c] + (src_x - src_x0) * img[src_y0,src_x1,c]
          bottom = (src_x1 - src_x) * img[src_y1,src_x0,c] + (src_x - src_x0) * img[src_y1,src_x1,c]
-         dst[dst_y,dst_x,c] = int((src_y1-src_y)*top+(src_y-src_y0)*bottom)
+         dst[dst_y,dst_x,c] = ((src_y1-src_y)*top+(src_y-src_y0)*bottom)
    return dst
                                 
 def bgr_to_rgb(img):
