@@ -56,8 +56,10 @@ def hwc_to_chw(img):
             dst[i,j,ch]=img[ch,i,j]
    return dst
 
+   
 
-def imageprocess(image_path):
+
+def image_process(image_path):
     img=cv2.imread(image_path)
     #img=cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
 
@@ -72,6 +74,14 @@ def imageprocess(image_path):
     img = hwc_to_chw(img)
 
     return img.transpose(2,0,1)[np.newaxis,...]
+
+
+def image_preprocess_batch(image_path):
+   batch = []
+   for path in image_path:
+      img =  image_process(path)
+      batch.append(img)
+      return np.concatenate(batch,axis=0)
 
 
     
