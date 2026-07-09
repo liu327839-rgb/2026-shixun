@@ -60,21 +60,32 @@ def hwc_to_chw(img):#重排
 
 
 def image_process(image_path):
-    img=cv2.imread(image_path)
-    #img=cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
+    img = cv2.imread(image_path)
 
-    #img=cv2.resize(img,(224,224))
+    if img is None:
+        raise ValueError("图片读取失败，请检查图片路径是否正确")
 
-    #img=img.astype(np.float32)/255.0
-    #img=(img-[0.485,0.456,0.406])/[0.229,0.224,0.225]
-    img = bilinear_resize(img)
-    img = bgr_to_rgb(img)
-    img = manual_normalize(img)
-    img = manual_standardize(img)
-    img = hwc_to_chw(img)
+    # BGR 转 RGB
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-    return img.transpose(2,0,1)[np.newaxis,...]
+    # 调整到模型需要的 224x224
+    img = cv2.resize(img, (224, 224))
 
+    # 转成 float32，并归一化到 0~1
+    img = img.astype(np.float32) / 255.0
+
+    # 标准化
+    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+    std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+    img = (img - mean) / std
+
+    # HWC -> CHW
+    img = img.transpose(2, 0, 1)
+
+    # 增加 batch 维度，变成 1x3x224x224
+    img = img[np.newaxis, ...]
+
+    return img.astype(np.float32)
 
 def image_preprocess_batch(image_path):
    batch = []
