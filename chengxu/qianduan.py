@@ -6,7 +6,10 @@ from tkinter import *
 from tkinter import filedialog, ttk
 from PIL import ImageTk, Image as pillow
 from queue_image import ImageQueue
+from onnx_infer import OnnxInferEngine
+from im import image_process
 
+engine = OnnxInferEngine()
 current_image_path = None
 image_queue = ImageQueue()
 DB_path = "recognition_history.db"
@@ -118,9 +121,22 @@ def select_file():
         current_task_label.config(text=f"当前任务:{os.path.basename(file_path)}")
 
 def recognize_image(image_path):
-    label = "假的例子：猫"
-    confidence = 0.95
-    return label, confidence
+    try:
+        # 1. 图片预处理
+        img_nchw = image_process(image_path)
+
+        # 2. ONNX 模型推理
+        result = engine.predict(img_nchw)
+
+        # 3. 取出结果
+        label = result["class_name"]
+        confidence = result["confidence"]
+
+        return label, confidence
+
+    except Exception as e:
+        print("识别失败：", e)
+        return "识别失败", 0.0
 
 def start_recognize():
     if current_image_path is None:
