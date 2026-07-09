@@ -53,7 +53,7 @@ def hwc_to_chw(img):#重排
    for i in range (h):
       for j in range (w):
          for ch in range (c):
-            dst[i,j,ch] = img[ch,i,j]
+            dst[ch,i,j,] = img[i,j,ch]
    return dst
 
    
