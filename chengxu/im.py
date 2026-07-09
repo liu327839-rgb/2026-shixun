@@ -81,7 +81,7 @@ def image_preprocess_batch(image_path):
    for path in image_path:
       img =  image_process(path)
       batch.append(img)
-      return np.concatenate(batch,axis=0)
+   return np.concatenate(batch,axis=0)
 
 
 
