@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 def bilinear_resize(img, src_h, src_w, dst_h=224, dst_w=224):
-    """双线性插值缩放，返回 float32 类型"""
+    #双线性插值缩放，返回 float32 类型
     channels = img.shape[2] if len(img.shape) == 3 else 1
     dst = np.zeros((dst_h, dst_w, channels), dtype=np.float32)
     scale_x = src_w / dst_w
@@ -37,12 +37,12 @@ def bgr_to_rgb(img):
  
 
 def manual_normalize(img):
-    """0~255 -> 0~1，向量化"""
+    #0~255 -> 0~1，向量化
     return img.astype(np.float32) / 255.0
-    # 若保留循环也可，但向量化更简洁
+  
 
 def manual_standardize(img):
-    """均值和标准差标准化，向量化"""
+    #均值和标准差标准化，向量化
     mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
     std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
     return (img - mean) / std
