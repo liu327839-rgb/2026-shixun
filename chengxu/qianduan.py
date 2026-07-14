@@ -1,157 +1,244 @@
 import os
-import queue
 import sqlite3
 from datetime import datetime
-from tkinter import *
-from tkinter import filedialog, ttk
-from PIL import ImageTk, Image as pillow
-from queue_image import ImageQueue
-from onnx_infer import OnnxInferEngine
-from im import image_process
+from tkinter import Tk, StringVar, END, filedialog, messagebox
+from tkinter import ttk
 
-engine = OnnxInferEngine()
+from PIL import Image as PillowImage
+from PIL import ImageTk
+
+from im import image_process
+from onnx_infer import OnnxInferEngine
+from queue_image import ImageQueue
+
+
+# ==================== 全局状态 ====================
 current_image_path = None
 image_queue = ImageQueue()
-DB_path = "recognition_history.db"
+DB_PATH = "recognition_history.db"
 
+batch_total = 0
+batch_done = 0
+batch_running = False
+
+try:
+    engine = OnnxInferEngine()
+    engine_error = None
+except Exception as exc:
+    engine = None
+    engine_error = str(exc)
+
+
+# ==================== 数据库 ====================
 def init_db():
-    conn = sqlite3.connect(DB_path)
-    cursor = conn.cursor()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS recognition_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                image_path TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                class_name TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
 
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS recognition_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        image_path TEXT NOT NULL,
-        file_name TEXT NOT NULL,
-        class_name TEXT NOT NULL,
-        confidence REAL NOT NULL,
-        created_at TEXT NOT NULL
-    )
-""")
-    conn.commit()
-    conn.close()
 
 def save_result(image_path, class_name, confidence):
-    conn = sqlite3.connect(DB_path)
-    cursor = conn.cursor()
-
     file_name = os.path.basename(image_path)
     created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    cursor.execute("""
-        INSERT INTO recognition_history 
-        (image_path, file_name, class_name, confidence, created_at)
-        VALUES (?, ?, ?, ?, ?)
-    """, (image_path, file_name, class_name, confidence, created_at))
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO recognition_history
+            (image_path, file_name, class_name, confidence, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (image_path, file_name, class_name, confidence, created_at),
+        )
+        conn.commit()
 
-    conn.commit()
-    conn.close()
 
 def search_history(keyword=""):
-    conn = sqlite3.connect(DB_path)
-    cursor = conn.cursor()
-
     keyword = keyword.strip()
-    if keyword:
-        like_keyword = f"%{keyword}%"
-        cursor.execute("""
-            SELECT id, created_at, file_name, class_name, confidence, image_path
-            FROM recognition_history
-            WHERE file_name LIKE ? OR class_name LIKE ?
-            ORDER BY id DESC
-        """, (like_keyword, like_keyword))
-    else:
-        cursor.execute("""
-            SELECT id, created_at, file_name, class_name, confidence, image_path
-            FROM recognition_history
-            ORDER BY id DESC
-        """)
 
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        if keyword:
+            like_keyword = f"%{keyword}%"
+            cursor.execute(
+                """
+                SELECT id, created_at, file_name, class_name, confidence, image_path
+                FROM recognition_history
+                WHERE file_name LIKE ? OR class_name LIKE ?
+                ORDER BY id DESC
+                """,
+                (like_keyword, like_keyword),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT id, created_at, file_name, class_name, confidence, image_path
+                FROM recognition_history
+                ORDER BY id DESC
+                """
+            )
+        return cursor.fetchall()
 
-def select_batch_files():
-    file_paths = filedialog.askopenfilenames(filetypes=[("Image files", "*.jpg;*.jpeg;*.png;*.bmp")])
-    if not file_paths:
-        return
-    image_queue.clear()
-    for file_path in file_paths:
-        image_queue.enqueue(file_path)
-    status_label.config(text="状态：批量图片导入成功")
-    current_task_label.config(text=f"当前任务:{current_image_path if current_image_path else '无'}")
-    remaining_label.config(text=f"剩余图片数量：{len(image_queue.items)}")
-    show_image_preview(file_paths[0])
 
-def process_next_image():
-    if image_queue.is_empty():
-        status_label.config(text="状态：没有更多图片需要识别")
-        current_task_label.config(text="当前任务:无")
-        remaining_label.config(text="剩余图片数量：0")
-        return
-    image_path = image_queue.dequeue()
-    file_name = os.path.basename(image_path)
-    current_task_label.config(text=f"当前任务:{file_name}")
-    remaining_label.config(text=f"剩余图片数量：{len(image_queue.items)}")
-    status_label.config(text=f"状态：正在识别 {file_name}...")
-    show_image_preview(image_path)
-    root.update_idletasks()
-    label, confidence = recognize_image(image_path)
-    result_label.config(text="识别结果：" + label)
-    confidence_label.config(text=f"置信度：{confidence * 100:.2f}%")
-
-    save_result(image_path, label, confidence)
-    refresh_history_table()
-    root.after(2000, process_next_image)
-
+# ==================== 图片与识别 ====================
 def show_image_preview(image_path):
-    img = pillow.open(image_path)
-    img.thumbnail((400, 400))
-    img_tk = ImageTk.PhotoImage(img)
-    image_preview.image = img_tk
-    image_preview.config(image=img_tk)
+    try:
+        image = PillowImage.open(image_path)
+        image.thumbnail((500, 360), PillowImage.Resampling.LANCZOS)
+        image_tk = ImageTk.PhotoImage(image)
+
+        image_preview.configure(image=image_tk, text="")
+        image_preview.image = image_tk
+        file_name_var.set(os.path.basename(image_path))
+    except Exception as exc:
+        image_preview.configure(image="", text="图片预览失败")
+        image_preview.image = None
+        messagebox.showerror("图片读取失败", str(exc))
+
 
 def select_file():
     global current_image_path
 
-    file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg;*.jpeg;*.png;*.bmp")])
-    if file_path:
-        current_image_path = file_path
-        show_image_preview(file_path)
-        current_task_label.config(text=f"当前任务:{os.path.basename(file_path)}")
+    file_path = filedialog.askopenfilename(
+        title="选择需要识别的图片",
+        filetypes=[("图片文件", "*.jpg *.jpeg *.png *.bmp"), ("所有文件", "*.*")],
+    )
+    if not file_path:
+        return
+
+    current_image_path = file_path
+    show_image_preview(file_path)
+    current_task_var.set(os.path.basename(file_path))
+    status_var.set("图片已选择，等待识别")
+
+
+def select_batch_files():
+    global batch_total, batch_done, batch_running
+
+    file_paths = filedialog.askopenfilenames(
+        title="批量选择图片",
+        filetypes=[("图片文件", "*.jpg *.jpeg *.png *.bmp"), ("所有文件", "*.*")],
+    )
+    if not file_paths:
+        return
+
+    image_queue.clear()
+    for file_path in file_paths:
+        image_queue.enqueue(file_path)
+
+    batch_total = len(file_paths)
+    batch_done = 0
+    batch_running = False
+
+    progress_bar.configure(maximum=max(batch_total, 1), value=0)
+    remaining_var.set(str(batch_total))
+    current_task_var.set(os.path.basename(file_paths[0]))
+    status_var.set(f"已导入 {batch_total} 张图片，等待批量识别")
+    show_image_preview(file_paths[0])
+
 
 def recognize_image(image_path):
-    try:
-        # 1. 图片预处理
-        img_nchw = image_process(image_path)
+    if engine is None:
+        raise RuntimeError(f"模型未成功加载：{engine_error}")
 
-        # 2. ONNX 模型推理
-        result = engine.predict(img_nchw)
+    image_tensor = image_process(image_path)
+    result = engine.predict(image_tensor)
+    return result["class_name"], result["confidence"]
 
-        # 3. 取出结果
-        label = result["class_name"]
-        confidence = result["confidence"]
 
-        return label, confidence
+def show_recognition_result(label, confidence):
+    result_var.set(label)
+    confidence_var.set(f"{confidence * 100:.2f}%")
 
-    except Exception as e:
-        print("识别失败：", e)
-        return "识别失败", 0.0
 
 def start_recognize():
     if current_image_path is None:
-        result_label.config(text="请先选择图片")
-        confidence_label.config(text="置信度：--")
+        messagebox.showwarning("提示", "请先选择一张图片")
         return
-    
-    label, confidence = recognize_image(current_image_path)
 
-    result_label.config(text="识别结果：" + label)
-    confidence_label.config(text=f"置信度：{confidence * 100:.2f}%")
+    status_var.set("正在识别，请稍候……")
+    root.update_idletasks()
 
-    save_result(current_image_path, label, confidence)
+    try:
+        label, confidence = recognize_image(current_image_path)
+        show_recognition_result(label, confidence)
+        save_result(current_image_path, label, confidence)
+        refresh_history_table()
+        status_var.set("单张图片识别完成")
+    except Exception as exc:
+        status_var.set("识别失败")
+        result_var.set("识别失败")
+        confidence_var.set("--")
+        messagebox.showerror("识别失败", str(exc))
+
+
+def start_batch_recognize():
+    global batch_running
+
+    if image_queue.is_empty():
+        messagebox.showwarning("提示", "请先批量导入图片")
+        return
+
+    if batch_running:
+        return
+
+    batch_running = True
+    batch_recognize_button.state(["disabled"])
+    select_batch_button.state(["disabled"])
+    process_next_image()
+
+
+def process_next_image():
+    global batch_done, batch_running
+
+    if image_queue.is_empty():
+        batch_running = False
+        batch_recognize_button.state(["!disabled"])
+        select_batch_button.state(["!disabled"])
+        current_task_var.set("无")
+        remaining_var.set("0")
+        status_var.set(f"批量识别完成，共处理 {batch_done} 张图片")
+        return
+
+    image_path = image_queue.dequeue()
+    file_name = os.path.basename(image_path)
+
+    current_task_var.set(file_name)
+    remaining_var.set(str(len(image_queue.items)))
+    status_var.set(f"正在识别：{file_name}")
+    show_image_preview(image_path)
+    root.update_idletasks()
+
+    try:
+        label, confidence = recognize_image(image_path)
+        show_recognition_result(label, confidence)
+        save_result(image_path, label, confidence)
+    except Exception as exc:
+        result_var.set("识别失败")
+        confidence_var.set("--")
+        print(f"批量识别失败：{file_name}，原因：{exc}")
+
+    batch_done += 1
+    progress_bar.configure(value=batch_done)
     refresh_history_table()
 
+    # 适当留出时间给界面刷新，答辩演示时更加直观
+    root.after(500, process_next_image)
+
+
+# ==================== 历史记录 ====================
 def refresh_history_table(keyword=""):
     rows = search_history(keyword)
 
@@ -169,100 +256,247 @@ def refresh_history_table(keyword=""):
                 file_name,
                 class_name,
                 f"{confidence * 100:.2f}%",
-                image_path
-            )
+                image_path,
+            ),
         )
-        
+
+    history_count_var.set(f"共 {len(rows)} 条记录")
+
+
+def search_from_entry():
+    refresh_history_table(search_var.get())
+
+
+# ==================== 界面布局 ====================
 init_db()
 
 root = Tk()
-root.title("ai图片识别工具")
-root.geometry("1200x900+300+50")
+root.title("AI 图片识别工具")
+root.geometry("1180x820+120+40")
+root.minsize(980, 700)
 
-yongtu = Label(root, text="ai图片识别工具",font=("微软雅黑", 20), fg="black")
-yongtu.pack()
+root.columnconfigure(0, weight=1)
+root.rowconfigure(1, weight=1)
 
-renwu = Label(root, text="请在下方放入你所需要识别的图片",font=("微软雅黑", 15), fg="red")
-renwu.pack()
+style = ttk.Style(root)
+try:
+    style.theme_use("clam")
+except Exception:
+    pass
 
-xuanze = Button(root, text="选择图片", font=("微软雅黑", 15), fg="black", command=select_file)
-xuanze.pack()
+style.configure("Title.TLabel", font=("微软雅黑", 22, "bold"))
+style.configure("SubTitle.TLabel", font=("微软雅黑", 10), foreground="#5B6472")
+style.configure("Section.TLabel", font=("微软雅黑", 12, "bold"))
+style.configure("InfoName.TLabel", font=("微软雅黑", 10), foreground="#667085")
+style.configure("InfoValue.TLabel", font=("微软雅黑", 12, "bold"))
+style.configure("Result.TLabel", font=("微软雅黑", 18, "bold"), foreground="#175CD3")
+style.configure("Primary.TButton", font=("微软雅黑", 11, "bold"), padding=(18, 9))
+style.configure("Normal.TButton", font=("微软雅黑", 11), padding=(18, 9))
+style.configure("Treeview", font=("微软雅黑", 9), rowheight=27)
+style.configure("Treeview.Heading", font=("微软雅黑", 9, "bold"))
 
-batch_button = Button(root, text="批量导入图片", font=("微软雅黑", 15), fg="black", command=select_batch_files)
-batch_button.pack()
+# 变量
+status_var = StringVar(value="等待操作")
+current_task_var = StringVar(value="无")
+remaining_var = StringVar(value="0")
+result_var = StringVar(value="等待识别")
+confidence_var = StringVar(value="--")
+file_name_var = StringVar(value="尚未选择图片")
+search_var = StringVar()
+history_count_var = StringVar(value="共 0 条记录")
 
-image_preview = Label(root)
-image_preview.pack()
+# 顶部标题区
+header_frame = ttk.Frame(root, padding=(24, 18, 24, 10))
+header_frame.grid(row=0, column=0, sticky="ew")
+header_frame.columnconfigure(0, weight=1)
 
-shibie = Button(root, text="开始识别", font=("微软雅黑", 15), fg="black", command=start_recognize)
-shibie.pack()
-
-batch_shibie = Button(root, text="批量识别", font=("微软雅黑", 15), fg="black", command=process_next_image)
-batch_shibie.pack()
-
-status_label = Label(root,text="状态：等待中", font=("微软雅黑", 15), fg="black")
-status_label.pack()
-
-current_task_label = Label(root,text="当前任务:无", font=("微软雅黑", 15), fg="black")
-current_task_label.pack()
-
-remaining_label = Label(root,text="剩余图片数量：0", font=("微软雅黑", 15), fg="black")
-remaining_label.pack()
-
-result_label = Label(root, text="识别结果：等待中", font=("微软雅黑", 15), fg="black")
-result_label.pack()
-
-confidence_label = Label(root, text="置信度：--", font=("微软雅黑", 15), fg="black")
-confidence_label.pack()
-
-history_title = Label(root, text="历史识别结果", font=("微软雅黑", 16), fg="black")
-history_title.pack(pady=5)
-
-search_frame = Frame(root)
-search_frame.pack()
-
-search_entry = Entry(search_frame, font=("微软雅黑", 12), width=30)
-search_entry.pack(side=LEFT, padx=5)
-
-search_button = Button(
-    search_frame,
-    text="查找",
-    font=("微软雅黑", 12),
-    command=lambda: refresh_history_table(search_entry.get())
+ttk.Label(header_frame, text="AI 图片识别工具", style="Title.TLabel").grid(
+    row=0, column=0, sticky="w"
 )
-search_button.pack(side=LEFT, padx=5)
+ttk.Label(
+    header_frame,
+    text="本地图像分类 · 单图识别 · 批量队列 · 历史记录",
+    style="SubTitle.TLabel",
+).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
-show_all_button = Button(
+# 主体容器
+main_frame = ttk.Frame(root, padding=(24, 8, 24, 20))
+main_frame.grid(row=1, column=0, sticky="nsew")
+main_frame.columnconfigure(0, weight=3)
+main_frame.columnconfigure(1, weight=2)
+main_frame.rowconfigure(1, weight=1)
+main_frame.rowconfigure(2, weight=1)
+
+# 操作按钮区：四个按钮横向排列，左右分组
+operation_frame = ttk.LabelFrame(main_frame, text="操作区", padding=12)
+operation_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
+for index in range(4):
+    operation_frame.columnconfigure(index, weight=1)
+
+select_button = ttk.Button(
+    operation_frame,
+    text="选择单张图片",
+    command=select_file,
+    style="Normal.TButton",
+)
+select_button.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+
+start_button = ttk.Button(
+    operation_frame,
+    text="开始单图识别",
+    command=start_recognize,
+    style="Primary.TButton",
+)
+start_button.grid(row=0, column=1, sticky="ew", padx=6)
+
+select_batch_button = ttk.Button(
+    operation_frame,
+    text="批量导入图片",
+    command=select_batch_files,
+    style="Normal.TButton",
+)
+select_batch_button.grid(row=0, column=2, sticky="ew", padx=6)
+
+batch_recognize_button = ttk.Button(
+    operation_frame,
+    text="开始批量识别",
+    command=start_batch_recognize,
+    style="Primary.TButton",
+)
+batch_recognize_button.grid(row=0, column=3, sticky="ew", padx=(6, 0))
+
+# 左侧图片预览区
+preview_frame = ttk.LabelFrame(main_frame, text="图片预览", padding=12)
+preview_frame.grid(row=1, column=0, sticky="nsew", padx=(0, 8), pady=(0, 12))
+preview_frame.columnconfigure(0, weight=1)
+preview_frame.rowconfigure(0, weight=1)
+
+image_preview = ttk.Label(
+    preview_frame,
+    text="请点击上方按钮选择图片",
+    anchor="center",
+    justify="center",
+)
+image_preview.grid(row=0, column=0, sticky="nsew")
+
+ttk.Separator(preview_frame, orient="horizontal").grid(
+    row=1, column=0, sticky="ew", pady=10
+)
+ttk.Label(preview_frame, textvariable=file_name_var, anchor="center").grid(
+    row=2, column=0, sticky="ew"
+)
+
+# 右侧状态与结果区
+info_frame = ttk.LabelFrame(main_frame, text="识别信息", padding=16)
+info_frame.grid(row=1, column=1, sticky="nsew", padx=(8, 0), pady=(0, 12))
+info_frame.columnconfigure(1, weight=1)
+
+info_items = [
+    ("运行状态", status_var),
+    ("当前任务", current_task_var),
+    ("剩余数量", remaining_var),
+]
+
+for row_index, (name, variable) in enumerate(info_items):
+    ttk.Label(info_frame, text=name, style="InfoName.TLabel").grid(
+        row=row_index, column=0, sticky="w", pady=8
+    )
+    ttk.Label(info_frame, textvariable=variable, style="InfoValue.TLabel").grid(
+        row=row_index, column=1, sticky="e", pady=8
+    )
+
+progress_bar = ttk.Progressbar(info_frame, mode="determinate", maximum=1, value=0)
+progress_bar.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(10, 16))
+
+ttk.Separator(info_frame, orient="horizontal").grid(
+    row=4, column=0, columnspan=2, sticky="ew", pady=8
+)
+
+ttk.Label(info_frame, text="识别结果", style="InfoName.TLabel").grid(
+    row=5, column=0, columnspan=2, pady=(14, 4)
+)
+ttk.Label(info_frame, textvariable=result_var, style="Result.TLabel").grid(
+    row=6, column=0, columnspan=2, pady=6
+)
+ttk.Label(info_frame, text="置信度", style="InfoName.TLabel").grid(
+    row=7, column=0, columnspan=2, pady=(18, 4)
+)
+ttk.Label(info_frame, textvariable=confidence_var, style="Result.TLabel").grid(
+    row=8, column=0, columnspan=2, pady=6
+)
+
+# 下方历史记录区
+history_frame = ttk.LabelFrame(main_frame, text="历史识别记录", padding=12)
+history_frame.grid(row=2, column=0, columnspan=2, sticky="nsew")
+history_frame.columnconfigure(0, weight=1)
+history_frame.rowconfigure(1, weight=1)
+
+search_frame = ttk.Frame(history_frame)
+search_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+search_frame.columnconfigure(0, weight=1)
+
+search_entry = ttk.Entry(search_frame, textvariable=search_var, font=("微软雅黑", 10))
+search_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+search_entry.bind("<Return>", lambda event: search_from_entry())
+
+search_button = ttk.Button(search_frame, text="查找", command=search_from_entry)
+search_button.grid(row=0, column=1, padx=4)
+
+show_all_button = ttk.Button(
     search_frame,
     text="显示全部",
-    font=("微软雅黑", 12),
-    command=lambda: refresh_history_table()
+    command=lambda: (search_var.set(""), refresh_history_table()),
 )
-show_all_button.pack(side=LEFT, padx=5)
+show_all_button.grid(row=0, column=2, padx=4)
+
+ttk.Label(search_frame, textvariable=history_count_var).grid(
+    row=0, column=3, padx=(14, 0)
+)
+
+# Treeview及滚动条
+tree_container = ttk.Frame(history_frame)
+tree_container.grid(row=1, column=0, sticky="nsew")
+tree_container.columnconfigure(0, weight=1)
+tree_container.rowconfigure(0, weight=1)
 
 history_tree = ttk.Treeview(
-    root,
+    tree_container,
     columns=("id", "time", "file", "class", "confidence", "path"),
     show="headings",
-    height=8
+    height=8,
 )
 
-history_tree.heading("id", text="编号")
-history_tree.heading("time", text="识别时间")
-history_tree.heading("file", text="图片名")
-history_tree.heading("class", text="识别结果")
-history_tree.heading("confidence", text="置信度")
-history_tree.heading("path", text="图片路径")
+columns = {
+    "id": ("编号", 60, "center"),
+    "time": ("识别时间", 150, "center"),
+    "file": ("图片名", 170, "w"),
+    "class": ("识别结果", 150, "center"),
+    "confidence": ("置信度", 90, "center"),
+    "path": ("图片路径", 380, "w"),
+}
 
-history_tree.column("id", width=50)
-history_tree.column("time", width=150)
-history_tree.column("file", width=180)
-history_tree.column("class", width=120)
-history_tree.column("confidence", width=100)
-history_tree.column("path", width=350)
+for column_name, (title, width, anchor) in columns.items():
+    history_tree.heading(column_name, text=title)
+    history_tree.column(column_name, width=width, anchor=anchor)
 
-history_tree.pack(pady=10)
+vertical_scrollbar = ttk.Scrollbar(
+    tree_container, orient="vertical", command=history_tree.yview
+)
+horizontal_scrollbar = ttk.Scrollbar(
+    tree_container, orient="horizontal", command=history_tree.xview
+)
+history_tree.configure(
+    yscrollcommand=vertical_scrollbar.set,
+    xscrollcommand=horizontal_scrollbar.set,
+)
+
+history_tree.grid(row=0, column=0, sticky="nsew")
+vertical_scrollbar.grid(row=0, column=1, sticky="ns")
+horizontal_scrollbar.grid(row=1, column=0, sticky="ew")
 
 refresh_history_table()
+
+if engine_error:
+    status_var.set("模型加载失败，请检查模型路径")
 
 root.mainloop()
